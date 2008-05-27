@@ -1,0 +1,311 @@
+#! /usr/bin/perl
+
+# -d - increase debug level
+# -f - force (update existing nodelist and ignore mismatch crc)
+# -i - do not calculate and check crc (process more quickly)
+# -z <zone> - set default zone to <zone> (for nodelist with missing first "Zone,2" line)
+
+require '/etc/fido/nodehist.cfg';
+
+$debug = $force = $nocrc = 0;
+while ($ARGV[0] =~ /^-([dfiz])$/) {
+	shift(@ARGV);
+	if ($1 eq "d") {
+		$debug++;
+	} elsif ($1 eq "f") {
+		$force++;
+	} elsif ($1 eq "i") {
+		$nocrc++;
+	} elsif ($1 eq "z" && $ARGV[0] =~ /^\d+$/) {
+		$zone = $region = $net = $&;
+		shift(@ARGV);
+	}
+}
+$_ = <>;
+unless (/^;A (?:FidoNet Nodelist for )?Friday, (\S+)\s+(\d+), (\d+) -- Day number\s+(\d+) :\s+(\d+)\s*$/) {
+	print STDERR "Bad nodelist header, first line:\n$_";
+	exit(1);
+}
+($smonth, $day, $year, $daynum, $listcrc) = ($1, $2, $3, $4, $5);
+
+$smonth =~ s/^(...).*$/$1/;
+@month = qw(Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec);
+for ($month=0; $month<12; $month++) {
+	last if $month[$month] eq $smonth;
+}
+if ($month == 12) {
+	print STDERR "Unknown month: $smonth!\n";
+	exit(1);
+}
+$date = sprintf('%04u-%02u-%02u', $year, $month+1, $day);
+
+@crc16tab = (
+  0x0000, 0x1021, 0x2042, 0x3063, 0x4084, 0x50A5, 0x60C6, 0x70E7,
+  0x8108, 0x9129, 0xA14A, 0xB16B, 0xC18C, 0xD1AD, 0xE1CE, 0xF1EF,
+  0x1231, 0x0210, 0x3273, 0x2252, 0x52B5, 0x4294, 0x72F7, 0x62D6,
+  0x9339, 0x8318, 0xB37B, 0xA35A, 0xD3BD, 0xC39C, 0xF3FF, 0xE3DE,
+  0x2462, 0x3443, 0x0420, 0x1401, 0x64E6, 0x74C7, 0x44A4, 0x5485,
+  0xA56A, 0xB54B, 0x8528, 0x9509, 0xE5EE, 0xF5CF, 0xC5AC, 0xD58D,
+  0x3653, 0x2672, 0x1611, 0x0630, 0x76D7, 0x66F6, 0x5695, 0x46B4,
+  0xB75B, 0xA77A, 0x9719, 0x8738, 0xF7DF, 0xE7FE, 0xD79D, 0xC7BC,
+  0x48C4, 0x58E5, 0x6886, 0x78A7, 0x0840, 0x1861, 0x2802, 0x3823,
+  0xC9CC, 0xD9ED, 0xE98E, 0xF9AF, 0x8948, 0x9969, 0xA90A, 0xB92B,
+  0x5AF5, 0x4AD4, 0x7AB7, 0x6A96, 0x1A71, 0x0A50, 0x3A33, 0x2A12,
+  0xDBFD, 0xCBDC, 0xFBBF, 0xEB9E, 0x9B79, 0x8B58, 0xBB3B, 0xAB1A,
+  0x6CA6, 0x7C87, 0x4CE4, 0x5CC5, 0x2C22, 0x3C03, 0x0C60, 0x1C41,
+  0xEDAE, 0xFD8F, 0xCDEC, 0xDDCD, 0xAD2A, 0xBD0B, 0x8D68, 0x9D49,
+  0x7E97, 0x6EB6, 0x5ED5, 0x4EF4, 0x3E13, 0x2E32, 0x1E51, 0x0E70,
+  0xFF9F, 0xEFBE, 0xDFDD, 0xCFFC, 0xBF1B, 0xAF3A, 0x9F59, 0x8F78,
+  0x9188, 0x81A9, 0xB1CA, 0xA1EB, 0xD10C, 0xC12D, 0xF14E, 0xE16F,
+  0x1080, 0x00A1, 0x30C2, 0x20E3, 0x5004, 0x4025, 0x7046, 0x6067,
+  0x83B9, 0x9398, 0xA3FB, 0xB3DA, 0xC33D, 0xD31C, 0xE37F, 0xF35E,
+  0x02B1, 0x1290, 0x22F3, 0x32D2, 0x4235, 0x5214, 0x6277, 0x7256,
+  0xB5EA, 0xA5CB, 0x95A8, 0x8589, 0xF56E, 0xE54F, 0xD52C, 0xC50D,
+  0x34E2, 0x24C3, 0x14A0, 0x0481, 0x7466, 0x6447, 0x5424, 0x4405,
+  0xA7DB, 0xB7FA, 0x8799, 0x97B8, 0xE75F, 0xF77E, 0xC71D, 0xD73C,
+  0x26D3, 0x36F2, 0x0691, 0x16B0, 0x6657, 0x7676, 0x4615, 0x5634,
+  0xD94C, 0xC96D, 0xF90E, 0xE92F, 0x99C8, 0x89E9, 0xB98A, 0xA9AB,
+  0x5844, 0x4865, 0x7806, 0x6827, 0x18C0, 0x08E1, 0x3882, 0x28A3,
+  0xCB7D, 0xDB5C, 0xEB3F, 0xFB1E, 0x8BF9, 0x9BD8, 0xABBB, 0xBB9A,
+  0x4A75, 0x5A54, 0x6A37, 0x7A16, 0x0AF1, 0x1AD0, 0x2AB3, 0x3A92,
+  0xFD2E, 0xED0F, 0xDD6C, 0xCD4D, 0xBDAA, 0xAD8B, 0x9DE8, 0x8DC9,
+  0x7C26, 0x6C07, 0x5C64, 0x4C45, 0x3CA2, 0x2C83, 0x1CE0, 0x0CC1,
+  0xEF1F, 0xFF3E, 0xCF5D, 0xDF7C, 0xAF9B, 0xBFBA, 0x8FD9, 0x9FF8,
+  0x6E17, 0x7E36, 0x4E55, 0x5E74, 0x2E93, 0x3EB2, 0x0ED1, 0x1EF0
+);
+
+$zone=1 unless $zone;
+$crc=0;
+$badcrc=0;
+
+debug(1, "Reading nodelist...");
+while (<>)
+{
+	next if /^\x1a\r?\n?$/;
+	unless ($nocrc) {
+		foreach $char (split(//, $_))
+		{
+			$crc = (($crc<<8) ^ $crc16tab[($crc>>8) ^ ord($char)]) & 0xffff;
+		}
+	}
+	#$badcrc=1 if /^;A.*warning.*failed crc check/i;
+	unless (/^(Zone|Region|Host|Hub|Hold|Down|Pvt|),(\d+),/)
+	{
+		print STDERR "Unknown line ignored:\n$_" unless /^;/;
+		next;
+	}
+	if ($1 eq "Zone") {
+		$zone = $region = $net = $2;
+		$node = 0;
+	} elsif ($1 eq "Region") {
+		$region = $net = $2;
+		$region{"$zone:$net"} = $region;
+		$node = 0;
+	} elsif ($1 eq "Host") {
+		$net = $2;
+		$region{"$zone:$net"} = $region if defined($region);
+		$node = 0;
+	} else {
+		$node = $2;
+	}
+	if (!defined($net)) {
+		print STDERR "Network undefined!\n";
+		exit(1);
+	}
+	s/\r*\n$//;
+	if (length($_) > $maxlinelen) {
+		print STDERR "Warning: line too long:\n$_\n";
+	}
+	$line{"$zone:$net/$node"} = $_;
+}
+
+if (!$nocrc && $crc != $listcrc) {
+	print STDERR "CRC mismatch: stored $listcrc, calculated $crc\n";
+	exit(1) unless ($badcrc || $force);
+	print STDERR "Warning found, ignoring wrong CRC\n" if $badcrc;
+}
+
+use DBI;
+
+unless ($dbh = DBI->connect($dsn, $myuser, $mypwd, { PrintError => 1 })) {
+	die "Can't connect to MySQL server: $DBI::err ($DBI::errstr)\n";
+}
+
+unless ($dbh->do("CREATE TABLE IF NOT EXISTS $mytable (
+			zone SMALLINT UNSIGNED NOT NULL,
+			net SMALLINT UNSIGNED NOT NULL,
+			node SMALLINT UNSIGNED NOT NULL,
+			daynum SMALLINT UNSIGNED NOT NULL,
+			date DATE NOT NULL,
+			line CHAR($maxlinelen) NOT NULL,
+			INDEX(date),
+			UNIQUE (zone, net, node, date)
+                  )")) {
+	$err = "$DBI::err ($DBI::errstr)";
+	$dbh->disconnect();
+	die "Can't create table: $err\n";
+}
+
+unless ($dbh->do("CREATE TABLE IF NOT EXISTS nets (
+			zone SMALLINT UNSIGNED NOT NULL,
+			net SMALLINT UNSIGNED NOT NULL,
+			region SMALLINT UNSIGNED NOT NULL,
+			date DATE NOT NULL,
+			INDEX(date),
+			UNIQUE (zone, net, date)
+                  )")) {
+	$err = "$DBI::err ($DBI::errstr)";
+	$dbh->disconnect();
+	die "Can't create table: $err\n";
+}
+
+debug(1, "Store regions info");
+# todo: update nextdate if needed
+$query = "select zone, net, region, date from nets where date <= '$date' order by zone, net, date desc";
+debug(2, $query);
+$sth = $dbh->prepare($query);
+unless ($sth->execute()) {
+	$err = "$DBI::err ($DBI::errstr)";
+	$dbh->disconnect();
+	die "Can't select: $err\n";
+}
+($zone, $net) = (0, 0);
+while (@arr = $sth->fetchrow_array()) {
+	next if ($zone == $arr[0] && $net == $arr[1]);
+	($zone, $net, $region, $dat) = @arr;
+	delete($region{"$zone:$net"}) if $region{"$zone:$net"} == $region;
+	$prevreg{"$zone:$net"} = $region if $dat eq $date;
+}
+$sth->finish();
+foreach (keys %region) {
+	next unless /^(\d+):(\d+)$/;
+	$query = ($prevreg{$_} ? "update" : "insert") . " nets values ($1, $2, $region{$_}, '$date')";
+	debug(2, $query);
+	unless ($dbh->do($query)) {
+		$err = "$DBI::err ($DBI::errstr)";
+		$dbh->disconnect();
+		die "Can't insert: $err\n";
+	}
+	delete($prevreg{$_}) if defined($prevreg{$_});
+}
+
+debug(1, "Check future nodelists");
+# nodelist
+$nextdate = undef;
+$query = "select date from $mytable where date >= '$date' group by date order by date limit 2";
+debug(2, $query);
+$sth = $dbh->prepare($query);
+unless ($sth->execute()) {
+	$err = "$DBI::err ($DBI::errstr)";
+	$dbh->disconnect();
+	die "Can't select: $err\n";
+}
+while (($nd) = $sth->fetchrow_array()) {
+	debug(3, "<< $nd");
+	if ($nd eq $date) {
+		print STDERR "Nodelist for $date already stored\n";
+		if (!$force) {
+			$sth->finish();
+			$dbh->disconnect();
+			exit(1);
+		}
+		$update=1;
+	} else {
+		$nextdate = $nd if !defined($nextdate);
+	}
+}
+$sth->finish();
+debug(2, "NextDate: $nextdate") if $nextdate;
+
+debug(1, "Get previous state");
+($zone, $net, $node) = (0, 0, 0);
+$query = "select zone, net, node, date, line from $mytable " . ($nextdate ? "where date <= '$nextdate' " : "") . "order by zone, net, node, date desc";
+debug(2, $query);
+$sth = $dbh->prepare($query);
+unless ($sth->execute()) {
+	$err = "$DBI::err ($DBI::errstr)";
+	$dbh->disconnect();
+	die "Can't select: $err\n";
+}
+while (@arr = $sth->fetchrow_array()) {
+	if ($arr[3] eq $nextdate) {
+		$nextline{"$arr[0]:$arr[1]/$arr[2]"} = $arr[4];
+		next;
+	}
+	if ($arr[3] eq $date) {
+		$curline{"$arr[0]:$arr[1]/$arr[2]"} = $arr[4];
+		$line{"$arr[0]:$arr[1]/$arr[2]"} = '' if !defined($line{"$arr[0]:$arr[1]/$arr[2]"});
+		next;
+	}
+	next if $zone == $arr[0] && $net == $arr[1] && $node == $arr[2];
+	($zone, $net, $node, $dat, $line) = @arr;
+	if ($line{"$zone:$net/$node"} eq $line) {
+		delete($line{"$zone:$net/$node"});
+		next;
+	}
+	if ($line ne '' && !defined($line{"$zone:$net/$node"})) {
+		$line{"$zone:$net/$node"} = '';
+	}
+	$prevline{"$zone:$net/$node"} = $line if ($nextdate && !$nextline{"$zone:$net/$node"});
+	$prevline{"$zone:$net/$node"} = $line if (defined($line{"$zone:$net/$node"}) && $line{"$zone:$net/$node"} eq '');
+}
+$sth->finish();
+
+debug(1, "Store new state");
+foreach (keys %line) {
+	unless (/^(\d+):(\d+)\/(\d+)$/) {
+		$dbh->disconnect();
+		die "Internal error!\n";
+	}
+	next if defined($curline{$_}) && $curline{$_} eq $line{$_};
+	if ($line{$_} eq $prevline{$_}) {	# incl. "" eq undef
+		$query = "delete from $mytable where date='$date' and zone=$1 and net=$2 and node=$3";
+		debug(2, $query);
+		unless ($dbh->do($query)) {
+			$err = "$DBI::err ($DBI::errstr)";
+			$dbh->disconnect();
+			die "Can't delete: $err\n";
+		}
+	}
+	else {
+		$query = ($curline{$_} ? "update" : "insert") . " $mytable values ($1, $2, $3, $daynum, '$date', " . $dbh->quote($line{$_}) . ")";
+		debug(2, $query);
+		unless ($dbh->do($query)) {
+			$err = "$DBI::err ($DBI::errstr)";
+			$dbh->disconnect();
+			die "Can't insert: $err\n";
+		}
+	}
+	if (defined($nextline{$_}) && ($line{$_} eq $nextline{$_})) {
+		$query = "delete from $mytable where date='$nextdate' and zone=$1 and net=$2 and node=$3";
+		debug(2, $query);
+		unless ($dbh->do($query)) {
+			$err = "$DBI::err ($DBI::errstr)";
+			$dbh->disconnect();
+			die "Can't delete: $err\n";
+		}
+	}
+	if ($nextdate && !defined($nextline{$_})) {
+		$nextline = $curline{$_};
+		$nextline = $prevline{$_} if !defined($nextline);
+		$nextline = '' if !defined($nextline);
+		$query = "insert $mytable values ($1, $2, $3, $daynum, '$nextdate', " . $dbh->quote($nextline) . ")";
+		debug(2, $query);
+		unless ($dbh->do($query)) {
+			$err = "$DBI::err ($DBI::errstr)";
+			$dbh->disconnect();
+			die "Can't insert: $err\n";
+		}
+	}
+}
+$dbh->disconnect();
+debug(1, "Done");
+exit(0);
+
+sub debug
+{
+	my($level, $line) = @_;
+
+	print localtime() . " $line\n" if $level <= $debug;
+}
+
