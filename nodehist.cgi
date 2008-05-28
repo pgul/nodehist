@@ -142,7 +142,7 @@ if (defined($name)) {
 		$lastdate =~ s/-/./g;
 		print "<tr><td> <a href=$myname?address=$zone:$net/$node>$zone:$net/$node</a> </td>";
 		print "<td> $sysop </td>";
-		print "<td> from $location </td>\n";
+		print "<td> <small>from</small> $location </td>\n";
 		print "<td> $firstdate - $lastdate </td></tr>\n";
 	}
 	print "</table></p>\n";
