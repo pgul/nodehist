@@ -5,13 +5,16 @@ require '/etc/fido/nodehist.cfg';
 use CGI ":standard";
 use DBI;
 
+$debug=1;
 $myname=$ENV{"SCRIPT_NAME"};
 $myname="/cgi-bin/nodehist.cgi" unless $myname;
 #$myname="";
+$maxresults = 40;
 @month = qw(Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec);
 
 $query = new CGI;
 $address = $query->param("address");
+$name = $query->param("name");
 
 print "Content-Type: text/html\n\n";
 print "<html><header><title>Nodelist history search</title></header>\n";
@@ -40,7 +43,7 @@ print "Using $nodelists nodelists, first: $firstdate, last: $lastdate</center></
 print "<p><center><form action=\"$myname\" method=post>\n";
 print "Enter 3D fidonet address (like 2:463/68):\n";
 print "<input size=11 name=address";
-print " value=\"$address\"" if defined($address);
+print " value=\"" . quote($address) . "\"" if defined($address);
 print ">\n";
 print "<input type=submit value=\"Get history\">\n";
 print "<table border=0><tr>\n";
@@ -53,10 +56,99 @@ print "<td><input type=checkbox name=\"nostatus\"" . checked("nostatus") . "></t
 print "</tr><tr>";
 print "<td><input type=checkbox name=\"nolocation\"" . checked("nolocation") . "></td><td> Ignore location changes</td>\n";
 print "<td><input type=checkbox name=\"noname\"" . checked("noname") . "></td><td> Ignore node name changes</td>\n";
-print "</tr></table>\n";
+print "</tr></table></form>\n";
+print "<b>Do not know node number? Search by sysop name</b><br />\n";
+print "<form action=\"$myname\" method=post>\n";
+print "Enter sysop name: <input size=30 name=name";
+print " value=\"" . quote($name) . "\"" if defined($name);
+print "><input type=submit value=\"Search for sysop\">\n";
 print "</form></center></p>\n";
 
-endpage() if !defined($address);
+endpage() if !defined($address) && !defined($name);
+
+if (defined($name)) {
+	#$_ = $name;
+	#s/[\?\*]//g;
+	#if (length($_)<4) {
+	#	endpage("Search string too short (min 4 chars)");
+	#}
+	#$name =~ s/ /_/g;
+	#$name =~ s/[^-a-zA-Z0-9\?\*,]/\\$&/g;
+	#$name =~ s/\?/_/g;
+	#$name =~ s/\*/%/g;
+	#$name = '%name%';
+	#$query="select distinct zone, node, net from $mytable where line like '$name' order by zone, net, node limit ".($maxresults+1);
+	#$query="select distinct zone, net, node from $mytable where $match order by $match desc, date asc limit ".($maxresults+1);
+	#$match="match (line) against(" . $dbh->quote($name) . ")";
+	@words = split(/\s+/, $name);
+	foreach (@words) {
+		$_ = "match (line) against(" . $dbh->quote($_) . ")";
+	}
+	$match=join(' * ', @words);
+	$query="select zone, net, node from $mytable where $match group by zone, net, node order by max($match) desc, min(date) limit " . ($maxresults+1);
+	debug($query);
+	$sth=$dbh->prepare($query);
+	unless ($sth->execute()) {
+		print STDERR "mysql error: $DBI::err ($DBI::errstr)\n";
+		endpage("SQL-server error, try later");
+	}
+	while (@arr = $sth->fetchrow_array()) {
+		push(@nodes, "$arr[0]:$arr[1]/$arr[2]");
+		debug("Result: $arr[0]:$arr[1]/$arr[2]");
+	}
+	$sth->finish();
+	endpage("No nodes found") if !@nodes;
+	print "<p><table border=0>\n";
+	for ($i=0; $i<=$#nodes; $i++) {
+		last if $i == $maxresults;
+		next if $nodes[$i] !~ /^(\d+):(\d+)\/(\d+)$/;
+		($zone, $net, $node) = ($1, $2, $3);
+		debug("found: $zone:$net/$node");
+		#$sth->prepare("select date, if (line like '$name', line, '') from $mytable where zone=$zone and net=$net and node=$node order by date");
+		$query="select date, if ($match, line, '') from $mytable where zone=$zone and net=$net and node=$node order by date";
+		debug($query);
+		$sth=$dbh->prepare($query);
+		unless ($sth->execute()) {
+			print STDERR "mysql error: $DBI::err ($DBI::errstr)\n";
+			endpage("SQL-server error, try later");
+		}
+		$firstdate=$lastdate=$location=$sysop='';
+		while (($date, $line) = $sth->fetchrow_array()) {
+			if (!$line) {
+				$lastdate=$date if !$lastdate;
+				next;
+			}
+			$lastdate='';
+			next if $firstdate;
+			$firstdate=$date;
+			next if $line !~ /^[^,]*,\d+,[^,]*,([^,]*),([^,]*),[^,]*,[^,]*(?:,.*)?$/;
+			($location, $sysop) = ($1, $2);
+		}
+		$sth->finish();
+		endpage("Internal error") unless $firstdate;
+		if ($lastdate) {
+			# get previous date for $lastdate
+			# we need date of last occurence, not date of removing
+			$sth=$dbh->prepare("select distinct date from $mytable where date<'$lastdate' order by date desc limit 1");
+			unless ($sth->execute()) {
+				print STDERR "mysql error: $DBI::err ($DBI::errstr)\n";
+				endpage("SQL-server error, try later");
+			}
+			$lastdate = $date if ($date) = $sth->fetchrow_array();
+			$sth->finish();
+		}
+		$firstdate =~ s/-/./g;
+		$lastdate = "now" if !$lastdate;
+		$lastdate =~ s/-/./g;
+		print "<tr><td> <a href=$myname?address=$zone:$net/$node>$zone:$net/$node</a> </td>";
+		print "<td> $sysop </td>";
+		print "<td> from $location </td>\n";
+		print "<td> $firstdate - $lastdate </td></tr>\n";
+	}
+	print "</table></p>\n";
+	print "<p><b>  More results skipped</b></p>\n" if $#nodes >= $maxresults;
+	endpage();
+}
 
 unless ($address =~ /^(\d+):(\d+)\/(\d+)$/) {
 	endpage("Incorrect address '$address'!");
@@ -109,6 +201,7 @@ while (($fnet, $fnode, $date, $daynum, $line) = $sth->fetchrow_array()) {
 	}
 	$h = sprintf("<b> %12s, nodelist.%03d: </b>", $date, $daynum);
 	if ($line) {
+		$line =~ s/ /_/g;
 		if ($line =~ /^([^,]*),\d+,([^,]*),([^,]*),([^,]*),([^,]*),([^,]*)(?:,(.*))?$/) {
 			@line = ($1, $2, $3, $4, $5, $6, $7);
 			if (($status   ne $line[0] && !defined($query->param("nostatus"))) ||
@@ -163,3 +256,17 @@ sub endpage
 	exit(0);
 }
 
+sub debug
+{
+	my ($str) = @_;
+	return unless $debug;
+	print "\n<!-- $str -->\n";
+}
+
+sub quote
+{
+	my ($str) = @_;
+	#$str =~ s/[^-a-zA-Z0-9., _]/sprintf('&#%02x;', ord($&))/ge;
+	$str =~ s/"/&quot;/g;
+	return $str;
+}
