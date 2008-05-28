@@ -1,5 +1,10 @@
 #! /usr/bin/perl
 
+# -d - increase debug level
+# -f - force (update existing nodelist and ignore mismatch crc)
+# -i - do not calculate and check crc (process more quickly)
+# -z <zone> - set default zone to <zone> (for nodelist with missing first "Zone,2" line)
+
 require '/etc/fido/nodehist.cfg';
 
 $debug = $force = $nocrc = 0;
@@ -83,7 +88,7 @@ while (<>)
 			$crc = (($crc<<8) ^ $crc16tab[($crc>>8) ^ ord($char)]) & 0xffff;
 		}
 	}
-	$badcrc=1 if /^;A.*warning.*failed crc check/i;
+	#$badcrc=1 if /^;A.*warning.*failed crc check/i;
 	unless (/^(Zone|Region|Host|Hub|Hold|Down|Pvt|),(\d+),/)
 	{
 		print STDERR "Unknown line ignored:\n$_" unless /^;/;
