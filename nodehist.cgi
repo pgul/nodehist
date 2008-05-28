@@ -9,7 +9,7 @@ $debug=1;
 $myname=$ENV{"SCRIPT_NAME"};
 $myname="/cgi-bin/nodehist.cgi" unless $myname;
 #$myname="";
-$maxresults = 40;
+$maxresults = 200;
 @month = qw(Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec);
 
 $query = new CGI;
