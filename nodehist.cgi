@@ -85,7 +85,7 @@ if (defined($name)) {
 		$_ = "match (line) against(" . $dbh->quote($_) . ")";
 	}
 	$match=join(' * ', @words);
-	$query="select zone, net, node from $mytable where $match group by zone, net, node order by max($match) desc, min(date) limit " . ($maxresults+1);
+	$query="select zone, net, node from $mytable where $match group by zone, net, node order by min(date) limit " . ($maxresults+1);
 	debug($query);
 	$sth=$dbh->prepare($query);
 	unless ($sth->execute()) {
