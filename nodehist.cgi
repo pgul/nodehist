@@ -4,9 +4,9 @@ require '/etc/fido/nodehist.cfg';
 
 use CGI ":standard";
 
-#$myname=$ENV{"SCRIPT_NAME"};
+$myname=$ENV{"SCRIPT_NAME"};
 #$myname="/cgi-bin/nodehist.cgi" unless $myname;
-$myname="";
+#$myname="";
 @month = qw(Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec);
 
 $query = new CGI;
@@ -85,7 +85,7 @@ unless ($sth->execute()) {
 }
 print "<center><h2>History of node $address:</h2></center>\n";
 print "<!-- noflags='" . $query->param("noflags") . "'-->\n" if defined($query->param("noflags"));
-print "<table border=0>\n";
+print "<pre>\n";
 $name = $phone = $flags = $location = $status = $speed = $sysname = '';
 $found = 0;
 $prevdate = '';
@@ -108,7 +108,7 @@ while (($fnet, $fnode, $date, $daynum, $line) = $sth->fetchrow_array()) {
 	if ($date =~ /^(\d+)-(\d+)-(\d+)$/) {
 		$date = sprintf('%2u&nbsp;%s&nbsp;%u', $3, $month[$2-1], $1);
 	}
-	$h = sprintf("<tr valign=baseline><td align=right><b> %s, </b></td><td><b> nodelist.%03d</b>: </td><td>", $date, $daynum);
+	$h = sprintf("<b> %12s, nodelist.%03d: </b>", $date, $daynum);
 	if ($line) {
 		if ($line =~ /^([^,]*),\d+,([^,]*),([^,]*),([^,]*),([^,]*),([^,]*)(?:,(.*))?$/) {
 			@line = ($1, $2, $3, $4, $5, $6, $7);
@@ -119,7 +119,7 @@ while (($fnet, $fnode, $date, $daynum, $line) = $sth->fetchrow_array()) {
 			    ($phone    ne $line[4] && !defined($query->param("nophone"))) ||
 			    ($speed    ne $line[5] && !defined($query->param("nospeed"))) ||
 			    ($flags    ne $line[6] && !defined($query->param("noflags")))) {
-				print "$h<pre>$line</pre></td></tr>\n";
+				print "$h$line\n";
 			} else {
 				#print "$h<code>$line</code> (not changed)</td></tr>\n";
 				#print "<!-- oldflags: '$flags', flags: '$line[6]' -->\n";
@@ -139,11 +139,11 @@ while (($fnet, $fnode, $date, $daynum, $line) = $sth->fetchrow_array()) {
 		} else {
 			$addinfo = "";
 		}
-		print "${h}Node removed from the nodelist$addinfo</td></tr>\n";
+		print "${h}Node removed from the nodelist$addinfo\n";
 		$name = $phone = $flags = $location = $status = $speed = $sysname = '';
 	}
 }
-print "</table>\n";
+print "</pre>\n";
 $sth->finish();
 $dbh->disconnect();
 print "Node not found\n" unless $found;
