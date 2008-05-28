@@ -3,9 +3,10 @@
 require '/etc/fido/nodehist.cfg';
 
 use CGI ":standard";
+use DBI;
 
 $myname=$ENV{"SCRIPT_NAME"};
-#$myname="/cgi-bin/nodehist.cgi" unless $myname;
+$myname="/cgi-bin/nodehist.cgi" unless $myname;
 #$myname="";
 @month = qw(Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec);
 
@@ -15,8 +16,28 @@ $address = $query->param("address");
 print "Content-Type: text/html\n\n";
 print "<html><header><title>Nodelist history search</title></header>\n";
 print "<body bgcolor=#fffff0>\n";
-print "<center><h2>View history of fidonet node</h2></center>\n";
-print "<center><form action=\"$myname\" method=post>\n";
+
+unless ($dbh = DBI->connect($dsn, $myuser, $mypwd, { PrintError => 0 })) {
+	endpage("Cannot connect to SQL server, try later");
+}
+
+$sth=$dbh->prepare("select distinct date from $mytable order by date");
+unless ($sth->execute()) {
+	print STDERR "mysql error: $DBI::err ($DBI::errstr)\n";
+	endpage("SQL-server error, try later");
+}
+$nodelists=0;
+while (($date) = $sth->fetchrow_array()) {
+	$date =~ s/-/./g;
+	$firstdate = $date unless $firstdate;
+	$lastdate = $date;
+	$nodelists++;
+}
+$sth->finish();
+
+print "<p><center><h2>View history of fidonet node</h2>\n";
+print "Using $nodelists nodelists, first: $firstdate, last: $lastdate</center></p>\n";
+print "<p><center><form action=\"$myname\" method=post>\n";
 print "Enter 3D fidonet address (like 2:463/68):\n";
 print "<input size=11 name=address";
 print " value=\"$address\"" if defined($address);
@@ -33,38 +54,21 @@ print "</tr><tr>";
 print "<td><input type=checkbox name=\"nolocation\"" . checked("nolocation") . "></td><td> Ignore location changes</td>\n";
 print "<td><input type=checkbox name=\"noname\"" . checked("noname") . "></td><td> Ignore node name changes</td>\n";
 print "</tr></table>\n";
-print "</form></center>\n";
+print "</form></center></p>\n";
 
-if (!defined($address)) {
-	print end_html();
-	exit(0);
-}
+endpage() if !defined($address);
 
 unless ($address =~ /^(\d+):(\d+)\/(\d+)$/) {
-	print "Incorrect address '$address'!";
-	print end_html();
-	exit(0);
+	endpage("Incorrect address '$address'!");
 }
 ($zone, $net, $node) = ($1, $2, $3);
-
-use DBI;
-
-unless ($dbh = DBI->connect($dsn, $myuser, $mypwd, { PrintError => 0 })) {
-	print "Cannot connect to SQL server, try later\n";
-	print end_html();
-	exit(0);
-}
 
 # Check only last region for this network
 if ($net != $zone) {
 	$sth=$dbh->prepare("select region from nets where zone=$zone and net=$net order by date desc limit 1");
 	unless ($sth->execute()) {
-		$err = "$DBI::err ($DBI::errstr)";
-		$dbh->disconnect();
-		print STDERR "mysql error: $err\n";
-		print "SQL-server error, try later\n";
-		print end_html();
-		exit(0);
+		print STDERR "mysql error: $DBI::err ($DBI::errstr)\n";
+		endpage("SQL-server error, try later");
 	}
 	($region) = $sth->fetchrow_array();
 	$sth->finish();
@@ -76,15 +80,10 @@ if ($net != $zone) {
 #print "\n<!-- select date, daynum, line from $mytable where zone=$zone and net=$net and node=$node order by date -->\n";
 $sth=$dbh->prepare("select net, node, date, daynum, line from $mytable where zone=$zone and (net=$net and (node=$node or node=0) or net=$region and node=0 or net=$zone and node=0) order by date, zone, net, node");
 unless ($sth->execute()) {
-	$err = "$DBI::err ($DBI::errstr)";
-	$dbh->disconnect();
-	print STDERR "mysql error: $err\n";
-	print "SQL-server error, try later\n";
-	print end_html();
-	exit(0);
+	print STDERR "mysql error: $DBI::err ($DBI::errstr)\n";
+	endpage("SQL-server error, try later");
 }
-print "<center><h2>History of node $address:</h2></center>\n";
-print "<!-- noflags='" . $query->param("noflags") . "'-->\n" if defined($query->param("noflags"));
+print "<center><h2>History of node $address</h2></center>\n";
 print "<pre>\n";
 $name = $phone = $flags = $location = $status = $speed = $sysname = '';
 $found = 0;
@@ -145,13 +144,22 @@ while (($fnet, $fnode, $date, $daynum, $line) = $sth->fetchrow_array()) {
 }
 print "</pre>\n";
 $sth->finish();
-$dbh->disconnect();
 print "Node not found\n" unless $found;
-print end_html();
-exit(0);
+endpage();
 
 sub checked
 {
 	my ($param) = @_;
 	return defined($query->param($param)) ? " checked" : "";
 }
+
+sub endpage
+{
+	my ($message) = @_;
+	$dbh->disconnect() if defined($dbh);
+	print "$message\n" if defined($message);
+	print "<p align=center><small><em>NodeHist created by <a href=mailto:gul@gul.kiev.ua>Pavel Gulchouck</a> <a href=mailto:Pavel_Gulchouck\@f68.n463.z2.fidonet.org>2:463/68</a></em></small></p>\n";
+	print "</body></html>\n";
+	exit(0);
+}
+
