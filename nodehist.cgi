@@ -251,7 +251,7 @@ sub endpage
 	my ($message) = @_;
 	$dbh->disconnect() if defined($dbh);
 	print "$message\n" if defined($message);
-	print "<p align=center><small><em>NodeHist created by <a href=mailto:gul\@gul.kiev.ua>Pavel Gulchouck</a> <a href=mailto:Pavel_Gulchouck\@f68.n463.z2.fidonet.org>2:463/68</a></em></small></p>\n";
+	print "<p align=center><small><em>NodeHist created by <a href=mailto:site\@gul.kiev.ua>Pavel Gulchouck</a> <a href=mailto:Pavel_Gulchouck\@f68.n463.z2.fidonet.org>2:463/68</a></em></small></p>\n";
 	print "</body></html>\n";
 	exit(0);
 }
