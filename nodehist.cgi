@@ -138,7 +138,7 @@ while (($fnet, $fnode, $date, $daynum, $line) = $sth->fetchrow_array()) {
 		} else {
 			$addinfo = "";
 		}
-		print "${h}Node removed from the nodelist$addinfo\n";
+		print "${h}<em>Node removed from the nodelist$addinfo</em>\n";
 		$name = $phone = $flags = $location = $status = $speed = $sysname = '';
 	}
 }
