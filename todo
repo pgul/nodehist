@@ -1,4 +1,5 @@
 - readme
+- cgi logging
 - colorize changed fields, sysop search results
 - more accurate insert into "nets" table (modify next date)
 - more accurate check for region (not using only latest date)
