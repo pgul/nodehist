@@ -1,5 +1,7 @@
 #! /usr/bin/perl
 
+# $Id$
+
 require '/etc/fido/nodehist.cfg';
 
 use CGI ":standard";

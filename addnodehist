@@ -1,5 +1,7 @@
 #! /usr/bin/perl
 
+$Id$
+
 # -d - increase debug level
 # -f - force (update existing nodelist and ignore mismatch crc)
 # -i - do not calculate and check crc (process more quickly)
