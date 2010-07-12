@@ -7,12 +7,13 @@ require '/etc/fido/nodehist.cfg';
 use CGI ":standard";
 use DBI;
 
-$debug=1;
+$debug=0;
 $myname=$ENV{"SCRIPT_NAME"};
 $myname="/cgi-bin/nodehist.cgi" unless $myname;
 #$myname="";
 $maxresults = 200;
 @month = qw(Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec);
+$min_word_len = 3; # Less then default 4, required ft_min_word_len=3 in my,cnf
 
 $query = new CGI;
 $address = $query->param("address");
@@ -42,7 +43,7 @@ $sth->finish();
 
 print "<p><center><h2>View history of fidonet node</h2>\n";
 print "Using $nodelists nodelists, first: $firstdate, last: $lastdate</center></p>\n";
-print "<p><center><form action=\"$myname\" method=post>\n";
+print "<p><center><form action=\"$myname\" method=get>\n";
 print "Enter 3D fidonet address (like 2:463/68):\n";
 print "<input size=11 name=address";
 print " value=\"" . quote($address) . "\"" if defined($address);
@@ -60,7 +61,7 @@ print "<td><input type=checkbox name=\"nolocation\"" . checked("nolocation") . "
 print "<td><input type=checkbox name=\"noname\"" . checked("noname") . "></td><td> Ignore node name changes</td>\n";
 print "</tr></table></form>\n";
 print "<b>Do not know node number? Search by sysop name</b><br />\n";
-print "<form action=\"$myname\" method=post>\n";
+print "<form action=\"$myname\" method=get>\n";
 print "Enter sysop name: <input size=30 name=name";
 print " value=\"" . quote($name) . "\"" if defined($name);
 print "><input type=submit value=\"Search for sysop\">\n";
@@ -84,6 +85,9 @@ if (defined($name)) {
 	#$match="match (line) against(" . $dbh->quote($name) . ")";
 	@words = split(/\s+/, $name);
 	foreach (@words) {
+		if (length($_) < $min_word_len) {
+			endpage("Too short word for search: $_");
+		}
 		$_ = "match (line) against(" . $dbh->quote($_) . ")";
 	}
 	$match=join(' * ', @words);
@@ -142,7 +146,7 @@ if (defined($name)) {
 		$firstdate =~ s/-/./g;
 		$lastdate = "now" if !$lastdate;
 		$lastdate =~ s/-/./g;
-		print "<tr><td> <a href=$myname?address=$zone:$net/$node>$zone:$net/$node</a> </td>";
+		print "<tr><td> <a href=$myname?address=$zone%3A$net%2F$node>$zone:$net/$node</a> </td>";
 		print "<td> $sysop </td>";
 		print "<td> <small>from</small> $location </td>\n";
 		print "<td> $firstdate - $lastdate </td></tr>\n";
