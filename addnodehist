@@ -1,6 +1,6 @@
 #! /usr/bin/perl
 
-$Id$
+# $Id$
 
 # -d - increase debug level
 # -f - force (update existing nodelist and ignore mismatch crc)
