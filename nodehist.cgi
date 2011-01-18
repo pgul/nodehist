@@ -15,9 +15,11 @@ $maxresults = 200;
 @month = qw(Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec);
 $min_word_len = 3; # Less then default 4, required ft_min_word_len=3 in my,cnf
 
-$query = new CGI;
-$address = $query->param("address");
-$name = $query->param("name");
+$q = new CGI;
+$address = $q->param("address");
+$name = $q->param("name");
+
+$badnl = (defined($q->param("badnl")) ? 1 : 0);
 
 print "Content-Type: text/html\n\n";
 print "<html><header><title>Nodelist history search</title></header>\n";
@@ -59,6 +61,9 @@ print "<td><input type=checkbox name=\"nostatus\"" . checked("nostatus") . "></t
 print "</tr><tr>";
 print "<td><input type=checkbox name=\"nolocation\"" . checked("nolocation") . "></td><td> Ignore location changes</td>\n";
 print "<td><input type=checkbox name=\"noname\"" . checked("noname") . "></td><td> Ignore node name changes</td>\n";
+print "</tr><tr>";
+print "<td><input type=checkbox name=\"nosysname\"" . checked("nosysname") . "></td><td> Ignore sysop changes</td>\n";
+print "<td><input type=checkbox name=\"badnl\"" . checked("badnl") . "></td><td> Show bad nodelists</td>\n";
 print "</tr></table></form>\n";
 print "<b>Do not know node number? Search by sysop name</b><br />\n";
 print "<form action=\"$myname\" method=get>\n";
@@ -176,7 +181,9 @@ if ($net != $zone) {
 }
 
 #print "\n<!-- select date, daynum, line from $mytable where zone=$zone and net=$net and node=$node order by date -->\n";
-$sth=$dbh->prepare("select net, node, date, daynum, line from $mytable where zone=$zone and (net=$net and (node=$node or node=0) or net=$region and node=0 or net=$zone and node=0) order by date, zone, net, node");
+$query="select net, node, date, daynum, line from $mytable where zone=$zone and (net=$net and (node=$node or node=0) or net=$region and node=0 or net=$zone and node=0) order by date, zone, net, node";
+debug($query);
+$sth=$dbh->prepare($query);
 unless ($sth->execute()) {
 	print STDERR "mysql error: $DBI::err ($DBI::errstr)\n";
 	endpage("SQL-server error, try later");
@@ -187,42 +194,59 @@ $name = $phone = $flags = $location = $status = $speed = $sysname = '';
 $found = 0;
 $prevdate = '';
 while (($fnet, $fnode, $date, $daynum, $line) = $sth->fetchrow_array()) {
-	$nozone = $noregion = $nonet = 0 if $date ne $prevdate;
-	$prevdate = $date;
-	if ($fnet != $net || $fnode != $node) {
-		# zone, net or region entry
-		next if $line;
-		if ($fnet == $zone) {
-			$nozone = 1;
-		} elsif ($fnet == $region) {
-			$noregion = 1;
-		} else {
-			$nonet = 1;
+	if ($date ne $prevdate) {
+		debug("date: $date, prevdate: $prevdate, addinfo: '$addinfo', h: '$h', hremoved: '$hremoved', wasnet: $wasnet") if !defined($name);
+		if (defined($addinfo) && $hremoved && $h ne $hremoved) {
+			if ($wasnet) {
+				# node completely removed
+				print "${h}<em>Node removed from the nodelist</em>\n";
+			} elsif (!$badnl) {
+				print "${hremoved}<em>Node removed from the nodelist$addinfo</em>\n";
+			}
+			$addinfo = undef;
+			$hremoved = '';
 		}
-		next;
+		$nozone = $noregion = $nonet = $wasnet = 0;
+		$prevdate = $date;
 	}
-	$found = 1;
 	if ($date =~ /^(\d+)-(\d+)-(\d+)$/) {
 		$date = sprintf('%2u&nbsp;%s&nbsp;%u', $3, $month[$2-1], $1);
 	}
 	$h = sprintf("<b> %12s, nodelist.%03d: </b>", $date, $daynum);
+	if ($fnet != $net || $fnode != $node) {
+		# zone, net or region entry
+		if ($line) {
+			$wasnet = 1 if $fnet == $net;
+		} else {
+			if ($fnet == $zone) {
+				$nozone = 1;
+			} elsif ($fnet == $region) {
+				$noregion = 1;
+			} else {
+				$nonet = 1;
+			}
+		}
+		next;
+	}
+	$found = 1;
 	if ($line) {
 		$line =~ s/ /_/g;
 		if ($line =~ /^([^,]*),\d+,([^,]*),([^,]*),([^,]*),([^,]*),([^,]*)(?:,(.*))?$/) {
 			@line = ($1, $2, $3, $4, $5, $6, $7);
-			if (($status   ne $line[0] && !defined($query->param("nostatus"))) ||
-			    ($name     ne $line[1] && !defined($query->param("noname"))) ||
-			    ($location ne $line[2] && !defined($query->param("nolocation"))) ||
-			    ($sysname  ne $line[3] && !defined($query->param("nosysname"))) ||
-			    ($phone    ne $line[4] && !defined($query->param("nophone"))) ||
-			    ($speed    ne $line[5] && !defined($query->param("nospeed"))) ||
-			    ($flags    ne $line[6] && !defined($query->param("noflags")))) {
+			if (($status   ne $line[0] && !defined($q->param("nostatus"))) ||
+			    ($name     ne $line[1] && !defined($q->param("noname"))) ||
+			    ($location ne $line[2] && !defined($q->param("nolocation"))) ||
+			    ($sysname  ne $line[3] && !defined($q->param("nosysname"))) ||
+			    ($phone    ne $line[4] && !defined($q->param("nophone"))) ||
+			    ($speed    ne $line[5] && !defined($q->param("nospeed"))) ||
+			    ($flags    ne $line[6] && !defined($q->param("noflags")))) {
 				print "$h$line\n";
 			} else {
 				#print "$h<code>$line</code> (not changed)</td></tr>\n";
 				#print "<!-- oldflags: '$flags', flags: '$line[6]' -->\n";
 			}
 			($status, $name, $location, $sysname, $phone, $speed, $flags) = @line;
+			$hremoved = '';
 		} else {
 			#print "<!-- Cannot parse line '$line' -->\n";
 		}
@@ -234,12 +258,20 @@ while (($fnet, $fnode, $date, $daynum, $line) = $sth->fetchrow_array()) {
 			$addinfo = " (with all region $region)";
 		} elsif ($nonet) {
 			$addinfo = " (with all network $net)";
+		} elsif ($fnode == 0) {
+			$addinfo = '';	# single nodelist without host is bad
 		} else {
-			$addinfo = "";
+			$addinfo = undef;
 		}
-		print "${h}<em>Node removed from the nodelist$addinfo</em>\n";
-		$name = $phone = $flags = $location = $status = $speed = $sysname = '';
+		if (!defined($addinfo) || $badnl) {
+			print "${h}<em>Node removed from the nodelist$addinfo</em>\n";
+			$name = $phone = $flags = $location = $status = $speed = $sysname = undef;
+		}
+		$hremoved = $h;
 	}
+}
+if ($wasline && defined($addinfo) && $hremoved && !$badnl) {
+	print "${hremoved}<em>Node removed from the nodelist$addinfo</em>\n";
 }
 print "</pre>\n";
 $sth->finish();
@@ -249,7 +281,7 @@ endpage();
 sub checked
 {
 	my ($param) = @_;
-	return defined($query->param($param)) ? " checked" : "";
+	return defined($q->param($param)) ? " checked" : "";
 }
 
 sub endpage
