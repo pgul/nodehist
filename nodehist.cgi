@@ -270,7 +270,7 @@ while (($fnet, $fnode, $date, $daynum, $line) = $sth->fetchrow_array()) {
 		$hremoved = $h;
 	}
 }
-if ($wasline && defined($addinfo) && $hremoved && !$badnl) {
+if (!$wasnet && defined($addinfo) && $hremoved && !$badnl) {
 	print "${hremoved}<em>Node removed from the nodelist$addinfo</em>\n";
 }
 print "</pre>\n";

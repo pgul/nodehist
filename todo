@@ -3,8 +3,6 @@
 - colorize changed fields, sysop search results
 - more accurate insert into "nets" table (modify next date)
 - more accurate check for region (not using only latest date)
-- inform about returning net/region/zone to the nodelist without node
-  if node was removed with all net/region/zone
 ? add info about node once per year for optimize adding new nodelist (do not
   forget adding info about removing node which is not changed for a long time)
   (accurate adding not last nodelist)
