@@ -1,15 +1,21 @@
 #! /usr/bin/perl
 
-# $Id$
-
 # -d - increase debug level
 # -f - force (update existing nodelist and ignore mismatch crc)
 # -i - do not calculate and check crc (process more quickly)
 # -z <zone> - set default zone to <zone> (for nodelist with missing first "Zone,2" line)
 
+use warnings;
+use strict;
+
+our ($dsn, $myuser, $mypwd, $mytable, $maxlinelen);
+
 require '/etc/fido/nodehist.cfg';
 
+$maxlinelen //= 160;
+my ($debug, $force, $nocrc);
 $debug = $force = $nocrc = 0;
+my ($zone, $region, $net, $node);
 while ($ARGV[0] =~ /^-([dfiz])$/) {
 	shift(@ARGV);
 	if ($1 eq "d") {
@@ -19,7 +25,7 @@ while ($ARGV[0] =~ /^-([dfiz])$/) {
 	} elsif ($1 eq "i") {
 		$nocrc++;
 	} elsif ($1 eq "z" && $ARGV[0] =~ /^\d+$/) {
-		$zone = $region = $net = $&;
+		$zone = $region = $net = $ARGV[0];
 		shift(@ARGV);
 	}
 }
@@ -28,20 +34,21 @@ unless (/^;A (?:FidoNet Nodelist for )?Friday, (\S+)\s+(\d+), (\d+) -- Day numbe
 	print STDERR "Bad nodelist header, first line:\n$_";
 	exit(1);
 }
-($smonth, $day, $year, $daynum, $listcrc) = ($1, $2, $3, $4, $5);
+my ($smonth, $day, $year, $daynum, $listcrc) = ($1, $2, $3, $4, $5);
 
 $smonth =~ s/^(...).*$/$1/;
-@month = qw(Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec);
-for ($month=0; $month<12; $month++) {
+my @month = qw(Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec);
+my $month;
+for ($month = 0; $month < 12; $month++) {
 	last if $month[$month] eq $smonth;
 }
 if ($month == 12) {
 	print STDERR "Unknown month: $smonth!\n";
 	exit(1);
 }
-$date = sprintf('%04u-%02u-%02u', $year, $month+1, $day);
+my $date = sprintf('%04u-%02u-%02u', $year, $month + 1, $day);
 
-@crc16tab = (
+my @crc16tab = (
   0x0000, 0x1021, 0x2042, 0x3063, 0x4084, 0x50A5, 0x60C6, 0x70E7,
   0x8108, 0x9129, 0xA14A, 0xB16B, 0xC18C, 0xD1AD, 0xE1CE, 0xF1EF,
   0x1231, 0x0210, 0x3273, 0x2252, 0x52B5, 0x4294, 0x72F7, 0x62D6,
@@ -76,16 +83,18 @@ $date = sprintf('%04u-%02u-%02u', $year, $month+1, $day);
   0x6E17, 0x7E36, 0x4E55, 0x5E74, 0x2E93, 0x3EB2, 0x0ED1, 0x1EF0
 );
 
-$zone=1 unless $zone;
-$crc=0;
-$badcrc=0;
+$zone = 1 unless $zone;
+my $crc = 0;
+my $badcrc = 0;
+my (%region, %prevreg);
+my %line;
 
 debug(1, "Reading nodelist...");
 while (<>)
 {
 	next if /^\x1a\r?\n?$/;
 	unless ($nocrc) {
-		foreach $char (split(//, $_))
+		foreach my $char (split(//, $_))
 		{
 			$crc = (($crc<<8) ^ $crc16tab[($crc>>8) ^ ord($char)]) & 0xffff;
 		}
@@ -130,9 +139,8 @@ if (!$nocrc && $crc != $listcrc) {
 
 use DBI;
 
-unless ($dbh = DBI->connect($dsn, $myuser, $mypwd, { PrintError => 1 })) {
-	die "Can't connect to MySQL server: $DBI::err ($DBI::errstr)\n";
-}
+my $dbh = DBI->connect($dsn, $myuser, $mypwd, { PrintError => 1 })
+	or die "Can't connect to MySQL server: $DBI::err ($DBI::errstr)\n";
 
 unless ($dbh->do("CREATE TABLE IF NOT EXISTS $mytable (
 			zone SMALLINT UNSIGNED NOT NULL,
@@ -145,7 +153,7 @@ unless ($dbh->do("CREATE TABLE IF NOT EXISTS $mytable (
 			UNIQUE(zone, net, node, date),
 			FULLTEXT(line)
                   ) ENGINE=MyISAM")) {
-	$err = "$DBI::err ($DBI::errstr)";
+	my $err = "$DBI::err ($DBI::errstr)";
 	$dbh->disconnect();
 	die "Can't create table: $err\n";
 }
@@ -158,25 +166,25 @@ unless ($dbh->do("CREATE TABLE IF NOT EXISTS nets (
 			INDEX(date),
 			UNIQUE (zone, net, date)
                   )")) {
-	$err = "$DBI::err ($DBI::errstr)";
+	my $err = "$DBI::err ($DBI::errstr)";
 	$dbh->disconnect();
 	die "Can't create table: $err\n";
 }
 
 debug(1, "Store regions info");
 # todo: update nextdate if needed
-$query = "select zone, net, region, date from nets where date <= '$date' order by zone, net, date desc";
+my $query = "select zone, net, region, date from nets where date <= '$date' order by zone, net, date desc";
 debug(2, $query);
-$sth = $dbh->prepare($query);
+my $sth = $dbh->prepare($query);
 unless ($sth->execute()) {
-	$err = "$DBI::err ($DBI::errstr)";
+	my $err = "$DBI::err ($DBI::errstr)";
 	$dbh->disconnect();
 	die "Can't select: $err\n";
 }
 ($zone, $net) = (0, 0);
-while (@arr = $sth->fetchrow_array()) {
+while (my @arr = $sth->fetchrow_array()) {
 	next if ($zone == $arr[0] && $net == $arr[1]);
-	($zone, $net, $region, $dat) = @arr;
+	my ($zone, $net, $region, $dat) = @arr;
 	delete($region{"$zone:$net"}) if $region{"$zone:$net"} == $region;
 	$prevreg{"$zone:$net"} = $region if $dat eq $date;
 }
@@ -186,7 +194,7 @@ foreach (keys %region) {
 	$query = ($prevreg{$_} ? "update" : "insert") . " nets values ($1, $2, $region{$_}, '$date')";
 	debug(2, $query);
 	unless ($dbh->do($query)) {
-		$err = "$DBI::err ($DBI::errstr)";
+		my $err = "$DBI::err ($DBI::errstr)";
 		$dbh->disconnect();
 		die "Can't insert: $err\n";
 	}
@@ -195,16 +203,17 @@ foreach (keys %region) {
 
 debug(1, "Check future nodelists");
 # nodelist
-$nextdate = undef;
+my $nextdate;
+my $update;
 $query = "select date from $mytable where date >= '$date' group by date order by date limit 2";
 debug(2, $query);
 $sth = $dbh->prepare($query);
 unless ($sth->execute()) {
-	$err = "$DBI::err ($DBI::errstr)";
+	my $err = "$DBI::err ($DBI::errstr)";
 	$dbh->disconnect();
 	die "Can't select: $err\n";
 }
-while (($nd) = $sth->fetchrow_array()) {
+while (my ($nd) = $sth->fetchrow_array()) {
 	debug(3, "<< $nd");
 	if ($nd eq $date) {
 		print STDERR "Nodelist for $date already stored\n";
@@ -213,7 +222,7 @@ while (($nd) = $sth->fetchrow_array()) {
 			$dbh->disconnect();
 			exit(1);
 		}
-		$update=1;
+		$update = 1;
 	} else {
 		$nextdate = $nd if !defined($nextdate);
 	}
@@ -223,15 +232,16 @@ debug(2, "NextDate: $nextdate") if $nextdate;
 
 debug(1, "Get previous state");
 ($zone, $net, $node) = (0, 0, 0);
+my (%nextline, %curline, %prevline);
 $query = "select zone, net, node, date, line from $mytable " . ($nextdate ? "where date <= '$nextdate' " : "") . "order by zone, net, node, date desc";
 debug(2, $query);
 $sth = $dbh->prepare($query);
 unless ($sth->execute()) {
-	$err = "$DBI::err ($DBI::errstr)";
+	my $err = "$DBI::err ($DBI::errstr)";
 	$dbh->disconnect();
 	die "Can't select: $err\n";
 }
-while (@arr = $sth->fetchrow_array()) {
+while (my @arr = $sth->fetchrow_array()) {
 	if ($arr[3] eq $nextdate) {
 		$nextline{"$arr[0]:$arr[1]/$arr[2]"} = $arr[4];
 		next;
@@ -242,7 +252,8 @@ while (@arr = $sth->fetchrow_array()) {
 		next;
 	}
 	next if $zone == $arr[0] && $net == $arr[1] && $node == $arr[2];
-	($zone, $net, $node, $dat, $line) = @arr;
+	my $line;
+	($zone, $net, $node, undef, $line) = @arr;
 	if ($line{"$zone:$net/$node"} eq $line) {
 		delete($line{"$zone:$net/$node"});
 		next;
@@ -266,7 +277,7 @@ foreach (keys %line) {
 		$query = "delete from $mytable where date='$date' and zone=$1 and net=$2 and node=$3";
 		debug(2, $query);
 		unless ($dbh->do($query)) {
-			$err = "$DBI::err ($DBI::errstr)";
+			my $err = "$DBI::err ($DBI::errstr)";
 			$dbh->disconnect();
 			die "Can't delete: $err\n";
 		}
@@ -275,7 +286,7 @@ foreach (keys %line) {
 		$query = ($curline{$_} ? "update" : "insert") . " $mytable values ($1, $2, $3, $daynum, '$date', " . $dbh->quote($line{$_}) . ")";
 		debug(2, $query);
 		unless ($dbh->do($query)) {
-			$err = "$DBI::err ($DBI::errstr)";
+			my $err = "$DBI::err ($DBI::errstr)";
 			$dbh->disconnect();
 			die "Can't insert: $err\n";
 		}
@@ -284,19 +295,19 @@ foreach (keys %line) {
 		$query = "delete from $mytable where date='$nextdate' and zone=$1 and net=$2 and node=$3";
 		debug(2, $query);
 		unless ($dbh->do($query)) {
-			$err = "$DBI::err ($DBI::errstr)";
+			my $err = "$DBI::err ($DBI::errstr)";
 			$dbh->disconnect();
 			die "Can't delete: $err\n";
 		}
 	}
 	if ($nextdate && !defined($nextline{$_})) {
-		$nextline = $curline{$_};
+		my $nextline = $curline{$_};
 		$nextline = $prevline{$_} if !defined($nextline);
 		$nextline = '' if !defined($nextline);
 		$query = "insert $mytable values ($1, $2, $3, $daynum, '$nextdate', " . $dbh->quote($nextline) . ")";
 		debug(2, $query);
 		unless ($dbh->do($query)) {
-			$err = "$DBI::err ($DBI::errstr)";
+			my $err = "$DBI::err ($DBI::errstr)";
 			$dbh->disconnect();
 			die "Can't insert: $err\n";
 		}

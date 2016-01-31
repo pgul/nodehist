@@ -1,41 +1,44 @@
 #! /usr/bin/perl
 
-# $Id$
+use warnings;
+use strict;
+
+our ($dsn, $myuser, $mypwd, $mytable, $myname, $maxresults, $min_word_len);
 
 require '/etc/fido/nodehist.cfg';
 
 use CGI ":standard";
 use DBI;
 
-$debug=0;
-$myname=$ENV{"SCRIPT_NAME"};
-$myname="/cgi-bin/nodehist.cgi" unless $myname;
+my $debug = 0;
+$myname //= $ENV{"SCRIPT_NAME"};
+$myname //= "/cgi-bin/nodehist.cgi";
 #$myname="";
-$maxresults = 200;
-@month = qw(Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec);
-$min_word_len = 3; # Less then default 4, required ft_min_word_len=3 in my,cnf
+$maxresults //= 200;
+$min_word_len //= 3; # Less then default 4, required ft_min_word_len=3 in my,cnf
+my @month = qw(Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec);
 
-$q = new CGI;
-$address = $q->param("address");
-$name = $q->param("name");
+my $q = new CGI;
+my $address = $q->param("address");
+my $name = $q->param("name");
 
-$badnl = (defined($q->param("badnl")) ? 1 : 0);
+my $badnl = (defined($q->param("badnl")) ? 1 : 0);
 
 print "Content-Type: text/html\n\n";
 print "<html><header><title>Nodelist history search</title></header>\n";
 print "<body bgcolor=#fffff0>\n";
 
-unless ($dbh = DBI->connect($dsn, $myuser, $mypwd, { PrintError => 0 })) {
-	endpage("Cannot connect to SQL server, try later");
-}
+my $dbh = DBI->connect($dsn, $myuser, $mypwd, { PrintError => 0 })
+	or endpage("Cannot connect to SQL server, try later");
 
-$sth=$dbh->prepare("select distinct date from $mytable order by date");
+my $sth = $dbh->prepare("select distinct date from $mytable order by date");
 unless ($sth->execute()) {
 	print STDERR "mysql error: $DBI::err ($DBI::errstr)\n";
 	endpage("SQL-server error, try later");
 }
-$nodelists=0;
-while (($date) = $sth->fetchrow_array()) {
+my $nodelists = 0;
+my ($firstdate, $lastdate);
+while (my ($date) = $sth->fetchrow_array()) {
 	$date =~ s/-/./g;
 	$firstdate = $date unless $firstdate;
 	$lastdate = $date;
@@ -88,50 +91,52 @@ if (defined($name)) {
 	#$query="select distinct zone, node, net from $mytable where line like '$name' order by zone, net, node limit ".($maxresults+1);
 	#$query="select distinct zone, net, node from $mytable where $match order by $match desc, date asc limit ".($maxresults+1);
 	#$match="match (line) against(" . $dbh->quote($name) . ")";
-	@words = split(/\s+/, $name);
+	my @words = split(/\s+/, $name);
 	foreach (@words) {
 		if (length($_) < $min_word_len) {
 			endpage("Too short word for search: $_");
 		}
 		$_ = "match (line) against(" . $dbh->quote($_) . ")";
 	}
-	$match=join(' * ', @words);
-	$query="select zone, net, node from $mytable where $match group by zone, net, node order by min(date) limit " . ($maxresults+1);
+	my $match = join(' * ', @words);
+	my $query = "select zone, net, node from $mytable where $match group by zone, net, node order by min(date) limit " . ($maxresults+1);
 	debug($query);
-	$sth=$dbh->prepare($query);
+	$sth = $dbh->prepare($query);
 	unless ($sth->execute()) {
 		print STDERR "mysql error: $DBI::err ($DBI::errstr)\n";
 		endpage("SQL-server error, try later");
 	}
-	while (@arr = $sth->fetchrow_array()) {
+	my @nodes;
+	while (my @arr = $sth->fetchrow_array()) {
 		push(@nodes, "$arr[0]:$arr[1]/$arr[2]");
 		debug("Result: $arr[0]:$arr[1]/$arr[2]");
 	}
 	$sth->finish();
 	endpage("No nodes found") if !@nodes;
 	print "<p><table border=0>\n";
-	for ($i=0; $i<=$#nodes; $i++) {
+	for (my $i = 0; $i <= $#nodes; $i++) {
 		last if $i == $maxresults;
 		next if $nodes[$i] !~ /^(\d+):(\d+)\/(\d+)$/;
-		($zone, $net, $node) = ($1, $2, $3);
+		my ($zone, $net, $node) = ($1, $2, $3);
 		debug("found: $zone:$net/$node");
 		#$sth->prepare("select date, if (line like '$name', line, '') from $mytable where zone=$zone and net=$net and node=$node order by date");
 		$query="select date, if ($match, line, '') from $mytable where zone=$zone and net=$net and node=$node order by date";
 		debug($query);
-		$sth=$dbh->prepare($query);
+		$sth = $dbh->prepare($query);
 		unless ($sth->execute()) {
 			print STDERR "mysql error: $DBI::err ($DBI::errstr)\n";
 			endpage("SQL-server error, try later");
 		}
-		$firstdate=$lastdate=$location=$sysop='';
-		while (($date, $line) = $sth->fetchrow_array()) {
+		my ($firstdate, $lastdate, $location, $sysop);
+		$firstdate = $lastdate = $location = $sysop = '';
+		while (my ($date, $line) = $sth->fetchrow_array()) {
 			if (!$line) {
 				$lastdate=$date if !$lastdate;
 				next;
 			}
-			$lastdate='';
+			$lastdate = '';
 			next if $firstdate;
-			$firstdate=$date;
+			$firstdate = $date;
 			next if $line !~ /^[^,]*,\d+,[^,]*,([^,]*),([^,]*),[^,]*,[^,]*(?:,.*)?$/;
 			($location, $sysop) = ($1, $2);
 		}
@@ -145,6 +150,7 @@ if (defined($name)) {
 				print STDERR "mysql error: $DBI::err ($DBI::errstr)\n";
 				endpage("SQL-server error, try later");
 			}
+			my $date;
 			$lastdate = $date if ($date) = $sth->fetchrow_array();
 			$sth->finish();
 		}
@@ -164,11 +170,12 @@ if (defined($name)) {
 unless ($address =~ /^(\d+):(\d+)\/(\d+)$/) {
 	endpage("Incorrect address '$address'!");
 }
-($zone, $net, $node) = ($1, $2, $3);
+my ($zone, $net, $node) = ($1, $2, $3);
+my $region;
 
 # Check only last region for this network
 if ($net != $zone) {
-	$sth=$dbh->prepare("select region from nets where zone=$zone and net=$net order by date desc limit 1");
+	$sth = $dbh->prepare("select region from nets where zone=$zone and net=$net order by date desc limit 1");
 	unless ($sth->execute()) {
 		print STDERR "mysql error: $DBI::err ($DBI::errstr)\n";
 		endpage("SQL-server error, try later");
@@ -181,25 +188,29 @@ if ($net != $zone) {
 }
 
 #print "\n<!-- select date, daynum, line from $mytable where zone=$zone and net=$net and node=$node order by date -->\n";
-$query="select net, node, date, daynum, line from $mytable where zone=$zone and (net=$net and (node=$node or node=0) or net=$region and node=0 or net=$zone and node=0) order by date, zone, net, node";
+my $query = "select net, node, date, daynum, line from $mytable where zone=$zone and (net=$net and (node=$node or node=0) or net=$region and node=0 or net=$zone and node=0) order by date, zone, net, node";
 debug($query);
-$sth=$dbh->prepare($query);
+$sth = $dbh->prepare($query);
 unless ($sth->execute()) {
 	print STDERR "mysql error: $DBI::err ($DBI::errstr)\n";
 	endpage("SQL-server error, try later");
 }
 print "<center><h2>History of node $address</h2></center>\n";
 print "<pre>\n";
+my ($phone, $flags, $location, $status, $speed, $sysname);
 $name = $phone = $flags = $location = $status = $speed = $sysname = '';
-$found = 0;
-$prevdate = '';
-while (($fnet, $fnode, $date, $daynum, $line) = $sth->fetchrow_array()) {
+my ($addinfo, $hremoved, $wasnet, $found);
+$addinfo = $hremoved = '';
+$found = $wasnet = 0;
+my ($nozone, $noregion, $nonet);
+my $prevdate = '';
+while (my ($fnet, $fnode, $date, $daynum, $line) = $sth->fetchrow_array()) {
 	if ($date ne $prevdate) {
-		debug("date: $date, prevdate: $prevdate, addinfo: '$addinfo', h: '$h', hremoved: '$hremoved', wasnet: $wasnet") if !defined($name);
-		if (defined($addinfo) && $hremoved && $h ne $hremoved) {
+		debug("date: $date, prevdate: $prevdate, addinfo: '$addinfo', hremoved: '$hremoved', wasnet: $wasnet") if !defined($name);
+		if (defined($addinfo) && $hremoved) {
 			if ($wasnet) {
 				# node completely removed
-				print "${h}<em>Node removed from the nodelist</em>\n";
+				print "<em>Node removed from the nodelist</em>\n";
 			} elsif (!$badnl) {
 				print "${hremoved}<em>Node removed from the nodelist$addinfo</em>\n";
 			}
@@ -212,7 +223,7 @@ while (($fnet, $fnode, $date, $daynum, $line) = $sth->fetchrow_array()) {
 	if ($date =~ /^(\d+)-(\d+)-(\d+)$/) {
 		$date = sprintf('%2u&nbsp;%s&nbsp;%u', $3, $month[$2-1], $1);
 	}
-	$h = sprintf("<b> %12s, nodelist.%03d: </b>", $date, $daynum);
+	my $h = sprintf("<b> %12s, nodelist.%03d: </b>", $date, $daynum);
 	if ($fnet != $net || $fnode != $node) {
 		# zone, net or region entry
 		if ($line) {
@@ -232,7 +243,7 @@ while (($fnet, $fnode, $date, $daynum, $line) = $sth->fetchrow_array()) {
 	if ($line) {
 		$line =~ s/ /_/g;
 		if ($line =~ /^([^,]*),\d+,([^,]*),([^,]*),([^,]*),([^,]*),([^,]*)(?:,(.*))?$/) {
-			@line = ($1, $2, $3, $4, $5, $6, $7);
+			my @line = ($1, $2, $3, $4, $5, $6, $7);
 			if (($status   ne $line[0] && !defined($q->param("nostatus"))) ||
 			    ($name     ne $line[1] && !defined($q->param("noname"))) ||
 			    ($location ne $line[2] && !defined($q->param("nolocation"))) ||
@@ -259,7 +270,7 @@ while (($fnet, $fnode, $date, $daynum, $line) = $sth->fetchrow_array()) {
 		} elsif ($nonet) {
 			$addinfo = " (with all network $net)";
 		} elsif ($fnode == 0) {
-			$addinfo = '';	# single nodelist without host is bad
+			$addinfo = '';	# single nodelist without node is bad
 		} else {
 			$addinfo = undef;
 		}
