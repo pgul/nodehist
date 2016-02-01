@@ -30,7 +30,7 @@ while ($ARGV[0] =~ /^-([dfiz])$/) {
 	}
 }
 $_ = <>;
-unless (/^;A (?:FidoNet Nodelist for )?Friday, (\S+)\s+(\d+), (\d+) -- Day number\s+(\d+) :\s+(\d+)\s*$/) {
+unless (/^;A (?:FidoNet Nodelist for )?\S+, (\S+)\s+(\d+), (\d+) -- Day number\s+(\d+) :\s+(\d+)\s*$/) {
 	print STDERR "Bad nodelist header, first line:\n$_";
 	exit(1);
 }
