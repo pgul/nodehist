@@ -139,7 +139,7 @@ if (!$nocrc && $crc != $listcrc) {
 
 use DBI;
 
-my $dbh = DBI->connect($dsn, $myuser, $mypwd, { PrintError => 1 })
+my $dbh = DBI->connect($dsn, $myuser, $mypwd, { PrintError => 1, mysql_enable_utf8 => 1 })
 	or die "Can't connect to MySQL server: $DBI::err ($DBI::errstr)\n";
 
 unless ($dbh->do("CREATE TABLE IF NOT EXISTS $mytable (

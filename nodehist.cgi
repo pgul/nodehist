@@ -28,7 +28,7 @@ print "Content-Type: text/html\n\n";
 print "<html><header><title>Nodelist history search</title></header>\n";
 print "<body bgcolor=#fffff0>\n";
 
-my $dbh = DBI->connect($dsn, $myuser, $mypwd, { PrintError => 0 })
+my $dbh = DBI->connect($dsn, $myuser, $mypwd, { PrintError => 0, mysql_enable_utf8 => 1 })
 	or endpage("Cannot connect to SQL server, try later");
 
 my $sth = $dbh->prepare("select distinct date from $mytable order by date");
