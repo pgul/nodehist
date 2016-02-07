@@ -185,7 +185,7 @@ unless ($sth->execute()) {
 while (my @arr = $sth->fetchrow_array()) {
 	next if ($zone == $arr[0] && $net == $arr[1]);
 	my ($zone, $net, $region, $dat) = @arr;
-	delete($region{"$zone:$net"}) if $region{"$zone:$net"} == $region;
+	delete($region{"$zone:$net"}) if $region{"$zone:$net"} && $region{"$zone:$net"} == $region;
 	$prevreg{"$zone:$net"} = $region if $dat eq $date;
 }
 $sth->finish();
