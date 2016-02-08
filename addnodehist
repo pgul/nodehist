@@ -242,7 +242,7 @@ unless ($sth->execute()) {
 	die "Can't select: $err\n";
 }
 while (my @arr = $sth->fetchrow_array()) {
-	if ($arr[3] eq $nextdate) {
+	if ($nextdate && $arr[3] eq $nextdate) {
 		$nextline{"$arr[0]:$arr[1]/$arr[2]"} = $arr[4];
 		next;
 	}
@@ -254,7 +254,7 @@ while (my @arr = $sth->fetchrow_array()) {
 	next if $zone == $arr[0] && $net == $arr[1] && $node == $arr[2];
 	my $line;
 	($zone, $net, $node, undef, $line) = @arr;
-	if ($line{"$zone:$net/$node"} eq $line) {
+	if ($line{"$zone:$net/$node"} && $line{"$zone:$net/$node"} eq $line) {
 		delete($line{"$zone:$net/$node"});
 		next;
 	}
