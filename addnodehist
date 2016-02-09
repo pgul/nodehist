@@ -273,7 +273,7 @@ foreach (keys %line) {
 		die "Internal error!\n";
 	}
 	next if defined($curline{$_}) && $curline{$_} eq $line{$_};
-	if ($line{$_} eq $prevline{$_}) {	# incl. "" eq undef
+	if ($line{$_} eq $prevline{$_} // '') {
 		$query = "delete from $mytable where date='$date' and zone=$1 and net=$2 and node=$3";
 		debug(2, $query);
 		unless ($dbh->do($query)) {
