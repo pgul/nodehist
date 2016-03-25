@@ -12,10 +12,10 @@ use DBI;
 
 my $debug = 0;
 $myname //= $ENV{"SCRIPT_NAME"};
-$myname //= "/cgi-bin/nodehist.cgi";
+#$myname //= "/cgi-bin/nodehist.cgi";
 #$myname="";
 $maxresults //= 200;
-$min_word_len //= 3; # Less then default 4, required ft_min_word_len=3 in my,cnf
+$min_word_len //= 3; # Less then default 4, required ft_min_word_len=3 in my.cnf
 my @month = qw(Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec);
 
 my $q = new CGI;
@@ -206,7 +206,7 @@ my ($nozone, $noregion, $nonet);
 my $prevdate = '';
 while (my ($fnet, $fnode, $date, $daynum, $line) = $sth->fetchrow_array()) {
 	if ($date ne $prevdate) {
-		debug("date: $date, prevdate: $prevdate, addinfo: '$addinfo', hremoved: '$hremoved', wasnet: $wasnet") if !defined($name);
+		debug("date: $date, prevdate: $prevdate, addinfo: '" . ($addinfo // '') . "', hremoved: '$hremoved', wasnet: $wasnet");
 		if (defined($addinfo) && $hremoved) {
 			if ($wasnet) {
 				# node completely removed
@@ -275,7 +275,7 @@ while (my ($fnet, $fnode, $date, $daynum, $line) = $sth->fetchrow_array()) {
 			$addinfo = undef;
 		}
 		if (!defined($addinfo) || $badnl) {
-			print "${h}<em>Node removed from the nodelist$addinfo</em>\n";
+			print "${h}<em>Node removed from the nodelist" . ($addinfo // '') . "</em>\n";
 			$name = $phone = $flags = $location = $status = $speed = $sysname = undef;
 		} else {
 			$hremoved = $h;
