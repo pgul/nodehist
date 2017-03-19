@@ -276,7 +276,7 @@ while (my ($fnet, $fnode, $date, $daynum, $line) = $sth->fetchrow_array()) {
 		}
 		if (!defined($addinfo) || $badnl) {
 			print "${h}<em>Node removed from the nodelist" . ($addinfo // '') . "</em>\n";
-			$name = $phone = $flags = $location = $status = $speed = $sysname = undef;
+			$name = $phone = $flags = $location = $status = $speed = $sysname = '';
 		} else {
 			$hremoved = $h;
 		}
