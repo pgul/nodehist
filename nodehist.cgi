@@ -47,7 +47,7 @@ while (my ($date) = $sth->fetchrow_array()) {
 $sth->finish();
 
 print "<p><center><h2>View history of fidonet node</h2>\n";
-print "Using $nodelists nodelists, first: $firstdate, last: $lastdate</center></p>\n";
+print "Using $nodelists nodelists, first: $firstdate, last: $lastdate</center>\n";
 print "<p><center><form action=\"$myname\" method=get>\n";
 print "Enter 3D fidonet address (like 2:463/68):\n";
 print "<input size=11 name=address";
@@ -57,7 +57,7 @@ print "<input type=submit value=\"Get history\">\n";
 print "<table border=0><tr>\n";
 #print "<td><input type=checkbox name=\"noflags\" checked></td><td> Ignore flags changes</td>\n";
 print "<td><input type=checkbox name=\"noflags\"" . checked("noflags") . "></td><td> Ignore flags changes</td>\n";
-print "<td><input type=checkbox name=\"nophone\"" . checked("nophone") . "></td><td> Ignore phone changes</td></tr>\n";
+print "<td><input type=checkbox name=\"nophone\"" . checked("nophone") . "></td><td> Ignore phone changes</td>\n";
 print "</tr><tr>";
 print "<td><input type=checkbox name=\"nospeed\"" . checked("nospeed") . "></td><td> Ignore speed changes</td>\n";
 print "<td><input type=checkbox name=\"nostatus\"" . checked("nostatus") . "></td><td> Ignore hold/down/pvt/hub status changes</td>\n";
@@ -73,7 +73,7 @@ print "<form action=\"$myname\" method=get>\n";
 print "Enter sysop name: <input size=30 name=name";
 print " value=\"" . quote($name) . "\"" if defined($name);
 print "><input type=submit value=\"Search for sysop\">\n";
-print "</form></center></p>\n";
+print "</form></center>\n";
 
 endpage() if !defined($address) && !defined($name);
 
