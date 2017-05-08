@@ -211,11 +211,13 @@ while (my ($fnet, $fnode, $date, $daynum, $line) = $sth->fetchrow_array()) {
             if ($wasnet) {
                 # node completely removed
                 print "<em>Node removed from the nodelist</em>\n";
+                $addinfo = undef;
+                $hremoved = '';
             } elsif ($badnl) {
                 print "${hremoved}<em>Node removed from the nodelist$addinfo</em>\n";
+                $addinfo = undef;
+                $hremoved = '';
             }
-            $addinfo = undef;
-            $hremoved = '';
         }
         $nozone = $noregion = $nonet = $wasnet = 0;
         $prevdate = $date;
@@ -282,7 +284,8 @@ while (my ($fnet, $fnode, $date, $daynum, $line) = $sth->fetchrow_array()) {
         }
     }
 }
-if (!$wasnet && defined($addinfo) && $hremoved && !$badnl) {
+if ($hremoved) {
+    # Addume the last existing nodelist is not bad
     print "${hremoved}<em>Node removed from the nodelist$addinfo</em>\n";
 }
 print "</pre>\n";
