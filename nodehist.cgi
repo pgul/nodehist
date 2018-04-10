@@ -285,7 +285,7 @@ while (my ($fnet, $fnode, $date, $daynum, $line) = $sth->fetchrow_array()) {
     }
 }
 if ($hremoved) {
-    # Addume the last existing nodelist is not bad
+    # Assume the last existing nodelist is not bad
     print "${hremoved}<em>Node removed from the nodelist$addinfo</em>\n";
 }
 print "</pre>\n";
