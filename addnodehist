@@ -8,7 +8,7 @@
 use warnings;
 use strict;
 
-our ($dsn, $myuser, $mypwd, $mytable, $maxlinelen);
+our ($dsn, $myuser, $mypwd, $mytable, $maxlinelen, $hide_phone);
 
 require '/etc/fido/nodehist.cfg';
 

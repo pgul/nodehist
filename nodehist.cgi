@@ -3,7 +3,7 @@
 use warnings;
 use strict;
 
-our ($dsn, $myuser, $mypwd, $mytable, $myname, $maxresults, $min_word_len);
+our ($dsn, $myuser, $mypwd, $mytable, $myname, $maxresults, $min_word_len, $hide_phone);
 
 require '/etc/fido/nodehist.cfg';
 
@@ -253,6 +253,9 @@ while (my ($fnet, $fnode, $date, $daynum, $line) = $sth->fetchrow_array()) {
                 ($phone    ne $line[4] && !defined($q->param("nophone"))) ||
                 ($speed    ne $line[5] && !defined($q->param("nospeed"))) ||
                 ($flags    ne $line[6] && !defined($q->param("noflags")))) {
+                if ($hide_phone && $line[4] =~ /[1-9]/) {
+                    $line =~ s!^((?:[^,]*,){5}[-0-9]*)([0-9]{4})!$1<span class="blur">****</span>!;
+                }
                 print "$h$line\n";
             } else {
                 #print "$h<code>$line</code> (not changed)</td></tr>\n";
