@@ -253,6 +253,7 @@ while (my ($fnet, $fnode, $date, $daynum, $line) = $sth->fetchrow_array()) {
                 ($phone    ne $line[4] && !defined($q->param("nophone"))) ||
                 ($speed    ne $line[5] && !defined($q->param("nospeed"))) ||
                 ($flags    ne $line[6] && !defined($q->param("noflags")))) {
+                $line = quote_html($line);
                 if ($hide_phone && $line[4] =~ /[1-9]/) {
                     $line =~ s!^((?:[^,]*,){5}[-0-9]*)([0-9]{4})!$1<span class="blur">****</span>!;
                 }
@@ -323,6 +324,16 @@ sub quote
 {
     my ($str) = @_;
     #$str =~ s/[^-a-zA-Z0-9., _]/sprintf('&#%02x;', ord($&))/ge;
+    $str =~ s/"/&quot;/g;
+    return $str;
+}
+
+sub quote_html
+{
+    my ($str) = @_;
+    $str =~ s/&/&amp;/g;
+    $str =~ s/</&lt;/g;
+    $str =~ s/>/&gt;/g;
     $str =~ s/"/&quot;/g;
     return $str;
 }
