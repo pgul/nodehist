@@ -135,8 +135,7 @@ if (defined($name)) {
                 next;
             }
             $lastdate = '';
-            next if $firstdate;
-            $firstdate = $date;
+            $firstdate ||= $date;
             next if $line !~ /^[^,]*,\d+,[^,]*,([^,]*),([^,]*),[^,]*,[^,]*(?:,.*)?$/;
             ($location, $sysop) = ($1, $2);
         }
