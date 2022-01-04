@@ -152,7 +152,7 @@ unless ($dbh->do("CREATE TABLE IF NOT EXISTS $mytable (
 			INDEX(date),
 			UNIQUE(zone, net, node, date),
 			FULLTEXT(line)
-                  ) ENGINE=MyISAM")) {
+                  ) Engine=MyISAM CHARSET=utf8")) {
 	my $err = "$DBI::err ($DBI::errstr)";
 	$dbh->disconnect();
 	die "Can't create table: $err\n";
