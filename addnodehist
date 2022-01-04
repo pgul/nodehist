@@ -88,10 +88,12 @@ my $crc = 0;
 my $badcrc = 0;
 my (%region, %prevreg);
 my %line;
+my $linenum = 0;
 
 debug(1, "Reading nodelist...");
 while (<>)
 {
+	$linenum++;
 	next if /^\x1a\r?\n?$/;
 	unless ($nocrc) {
 		foreach my $char (split(//, $_))
@@ -102,7 +104,7 @@ while (<>)
 	#$badcrc=1 if /^;A.*warning.*failed crc check/i;
 	unless (/^(Zone|Region|Host|Hub|Hold|Down|Pvt|),(\d+),/)
 	{
-		print STDERR "Unknown line ignored:\n$_" unless /^;/;
+		print STDERR "Unknown line $linenum ignored:\n$_" unless /^;/;
 		next;
 	}
 	if ($1 eq "Zone") {
@@ -124,8 +126,14 @@ while (<>)
 		exit(1);
 	}
 	s/\r*\n$//;
+
+	if (/[^[:print:]]/) {
+		print STDERR "Warning: remove unprintable characters from line $linenum:\n$_\n";
+		s/[^[:print:]]//g;
+	}
+
 	if (length($_) > $maxlinelen) {
-		print STDERR "Warning: line too long:\n$_\n";
+		print STDERR "Warning: line $linenum too long:\n$_\n";
 	}
 	s/_/ /g;	# for fulltext index
 	$line{"$zone:$net/$node"} = $_;
@@ -152,7 +160,7 @@ unless ($dbh->do("CREATE TABLE IF NOT EXISTS $mytable (
 			INDEX(date),
 			UNIQUE(zone, net, node, date),
 			FULLTEXT(line)
-                  ) Engine=MyISAM CHARSET=utf8")) {
+		) Engine=MyISAM CHARSET=utf8")) {
 	my $err = "$DBI::err ($DBI::errstr)";
 	$dbh->disconnect();
 	die "Can't create table: $err\n";
@@ -165,7 +173,7 @@ unless ($dbh->do("CREATE TABLE IF NOT EXISTS nets (
 			date DATE NOT NULL,
 			INDEX(date),
 			UNIQUE (zone, net, date)
-                  )")) {
+		)")) {
 	my $err = "$DBI::err ($DBI::errstr)";
 	$dbh->disconnect();
 	die "Can't create table: $err\n";
