@@ -157,8 +157,8 @@ if (defined($name)) {
         $lastdate = "now" if !$lastdate;
         $lastdate =~ s/-/./g;
         print "<tr><td> <a href=$myname?address=$zone%3A$net%2F$node>$zone:$net/$node</a> </td>";
-        print "<td> $sysop </td>";
-        print "<td> <small>from</small> $location </td>\n";
+        print "<td> " . quote_html($sysop) . " </td>";
+        print "<td> <small>from</small> " . quote_html($location) . " </td>\n";
         print "<td> $firstdate - $lastdate </td></tr>\n";
     }
     print "</table></p>\n";
@@ -167,7 +167,7 @@ if (defined($name)) {
 }
 
 unless ($address =~ /^(\d+):(\d+)\/(\d+)$/) {
-    endpage("Incorrect address '$address'!");
+    endpage("Incorrect address '" . quote_html($address) . "'!");
 }
 my ($zone, $net, $node) = ($1, $2, $3);
 my $region;
@@ -194,7 +194,7 @@ unless ($sth->execute()) {
     print STDERR "mysql error: $DBI::err ($DBI::errstr)\n";
     endpage("SQL-server error, try later");
 }
-print "<center><h2>History of node $address</h2></center>\n";
+print "<center><h2>History of node " . quote_html($address) . "</h2></center>\n";
 print "<pre>\n";
 my ($phone, $flags, $location, $status, $speed, $sysname);
 $name = $phone = $flags = $location = $status = $speed = $sysname = '';
